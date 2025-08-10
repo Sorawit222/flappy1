@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Flappy – โหมดช้า/ลื่น</title>
+  <style>
+    :root{
+      --bg1:#e0f2ff;--bg2:#fef5ff;--ink:#334155;--muted:#64748b;--accent:#22c55e;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; display:grid; place-items:center; padding:16px; background:linear-gradient(180deg,var(--bg1),var(--bg2));
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color:var(--ink);
+    }
+    .card{ width:min(520px,100%); background:#fff; border:1px solid #e5e7eb; border-radius:18px; box-shadow:0 10px 30px rgba(2,6,23,.06); padding:18px; }
+    .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px}
+    .muted{color:var(--muted); font-size:12px}
+    button, label[for="imgPick"]{
+      border:0; background:#f1f5f9; padding:8px 12px; border-radius:12px; cursor:pointer; transition:transform .1s ease, box-shadow .2s ease; font-size:14px;
+    }
+    button:hover, label[for="imgPick"]:hover{ box-shadow:0 6px 16px rgba(2,6,23,.08)}
+    button:active{ transform:scale(.97)}
+    #playBtn{ background:var(--accent); color:white }
+    canvas{ width:100%; height:auto; image-rendering:auto; display:block; border-radius:14px; border:1px solid #e5e7eb }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="row">
+      <div>
+        <strong>Flappy – โหมดช้า/ลื่น</strong>
+        <div class="muted">แตะ/คลิก/กด Space เพื่อกระโดด • อัปโหลดรูปแทนตัวได้</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center">
+        <input id="imgPick" type="file" accept="image/*" style="display:none" />
+        <label for="imgPick">เปลี่ยนรูปตัวเล่น</label>
+        <button id="playBtn">เริ่มใหม่</button>
+      </div>
+    </div>
+
+    <canvas id="game" width="480" height="640" aria-label="Flappy Game"></canvas>
+
+    <p class="muted" style="margin:10px 4px 2px">* ปรับให้ง่ายขึ้น: ความเร็วเริ่มต้นช้าลง, ช่องว่างท่อกว้างขึ้น, การเร่งความเร็วค่อยๆ เพิ่ม (ease-in)</p>
+  </main>
+
+  <script>
+  // ===== ค่าปรับง่าย/ลื่น (แก้เลขพวกนี้เพื่อจูนความยาก) =====
+  const WIDTH = 480, HEIGHT = 640;
+  const PIPE_GAP = 220;           // ช่องว่างระหว่างท่อ (ยิ่งมากยิ่งง่าย)
+  const PIPE_INTERVAL = 1.8;      // วินาทีต่อการเกิดท่อใหม่ (มาก = ง่าย)
+  const PIPE_SPEED = 85;          // ความเร็วเลื่อนฉาก (px/วินาที) เริ่มต้นช้า
+  const SPEED_RAMP_PER_MIN = 0.25;// เพิ่มความเร็วต่อ 1 นาที (ค่อยๆ เร็วขึ้นเล็กน้อย)
+  const GRAVITY = 900;            // แรงโน้มถ่วง (px/s^2)
+  const JUMP_VELOCITY = -300;     // ความแรงกระโดด (px/s) ค่าติดลบคือลอยขึ้น
+  const TERM_VY = 420;            // จำกัดความเร็วตกสูงสุดเพื่อให้ควบคุมง่าย
+  const START_EASE_SEC = 2.0;     // ช่วงเวลา ease-in ตอนเริ่มเกม ให้ความเร็วค่อยๆ มาครบ
+
+  // ===== พื้นที่เกม/ตัวแปร =====
+  const cvs = document.getElementById('game');
+  const ctx = cvs.getContext('2d');
+  let pipes = []; // {x, topH}
+  let t = 0; // เวลาสะสมวินาที
+  let spawnTimer = 0;
+  let score = 0, best = 0;
+  let playing = false, gameOver = false;
+
+  const player = {
+    x: WIDTH * 0.28,
+    y: HEIGHT * 0.42,
+    vy: 0,
+    w: 36,
+    h: 36,
+    img: null,
+  };
+
+  // โหลดรูปเริ่มต้นจากไฟล์ player.png ถ้าไม่มีจะวาดวงกลมแทน
+  const defaultImg = new Image();
+  defaultImg.src = 'player.png';
+  defaultImg.onload = () => { player.img = defaultImg; };
+  defaultImg.onerror = () => { player.img = null; };
+
+  document.getElementById('imgPick').addEventListener('change', e => {
+    const f = e.target.files?.[0];
+    if(!f) return;
+    const url = URL.createObjectURL(f);
+    const im = new Image();
+    im.onload = () => { player.img = im; URL.revokeObjectURL(url); };
+    im.src = url;
+  });
+
+  document.getElementById('playBtn').addEventListener('click', resetGame);
+  window.addEventListener('keydown', e => { if(e.code==='Space'){ e.preventDefault(); jump(); }});
+  cvs.addEventListener('pointerdown', jump);
+
+  function resetGame(){
+    pipes = [];
+    t = 0; spawnTimer = 0; score = 0; gameOver = false; playing = true;
+    player.y = HEIGHT*0.42; player.vy = 0;
+  }
+
+  function jump(){
+    if(!playing){ resetGame(); return; }
+    if(gameOver){ resetGame(); return; }
+    // กระโดดแบบนุ่ม ๆ: blend ความเร็วแทนการตัดทันที
+    player.vy = player.vy*0.2 + JUMP_VELOCITY*0.8;
+  }
+
+  // easing นิ่ม ๆ ช่วงเริ่มเกม
+  const easeOutCubic = (x)=> 1 - Math.pow(1-x,3);
+
+  let last = performance.now();
+  requestAnimationFrame(loop);
+
+  function loop(now){
+    const dt = Math.min((now - last)/1000, 1/30); // จำกัด dt สูงสุดเพื่อความลื่น
+    last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt){
+    if(!playing){ return; }
+    if(gameOver){ return; }
+
+    t += dt; spawnTimer += dt;
+
+    // ความเร็วเลื่อนฉาก = เริ่มช้า + ease-in + ramp ช้าๆ ตามเวลาเล่น
+    const easeMul = t < START_EASE_SEC ? (0.25 + 0.75*easeOutCubic(t/START_EASE_SEC)) : 1;
+    const rampMul = 1 + (SPEED_RAMP_PER_MIN * (t/60));
+    const scroll = PIPE_SPEED * easeMul * rampMul; // px/s
+
+    // สร้างท่อ
+    if(spawnTimer >= PIPE_INTERVAL){
+      spawnTimer = 0;
+      const minTop = 60, minBottom = 80;
+      const topH = Math.random()*(HEIGHT - PIPE_GAP - minTop - minBottom) + minTop;
+      pipes.push({ x: WIDTH + 40, topH, passed:false });
+    }
+
+    // อัปเดตท่อ
+    for(const p of pipes){ p.x -= scroll*dt; }
+    // ลบท่อที่พ้นจอ
+    pipes = pipes.filter(p => p.x > -80);
+
+    // แรงโน้มถ่วง + ลิมิตความเร็วตก
+    player.vy += GRAVITY * dt;
+    if(player.vy > TERM_VY) player.vy = TERM_VY;
+    player.y += player.vy * dt;
+
+    // ชนขอบบน/ล่าง
+    if(player.y < 0){ player.y = 0; player.vy = 0; }
+    if(player.y + player.h > HEIGHT-30){ // ก้นจอเป็นพื้นเล็กน้อย
+      player.y = HEIGHT-30 - player.h; gameOver = true;
+    }
+
+    // คำนวณคะแนน + ชนท่อ
+    for(const p of pipes){
+      if(!p.passed && p.x + 60 < player.x){ p.passed = true; score++; }
+      if(collidePipe(p)){ gameOver = true; }
+    }
+
+    if(gameOver){ best = Math.max(best, score); }
+  }
+
+  function collidePipe(p){
+    const pipeW = 60; // ความกว้างท่อ
+    const gapY = p.topH; // ความสูงท่อบน
+    const gapBottomY = p.topH + PIPE_GAP; // จุดเริ่มท่อล่าง
+
+    // กล่องชนของผู้เล่น (บีบเล็กน้อยให้เล่นง่าย)
+    const px = player.x+6, py = player.y+6, pw = player.w-12, ph = player.h-12;
+
+    // ชนขอบท่อซ้าย/ขวา
+    const hitX = (px < p.x+pipeW) && (px+pw > p.x);
+    if(!hitX) return false;
+
+    // ชนท่อบนหรือล่าง (ถ้าอยู่นอกช่องว่าง)
+    if(py < gapY || (py+ph) > gapBottomY) return true;
+    return false;
+  }
+
+  // วาดทุกอย่าง
+  function draw(){
+    // พื้นหลังท้องฟ้า
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+    const g = ctx.createLinearGradient(0,0,0,HEIGHT);
+    g.addColorStop(0,'#c7f1ff'); g.addColorStop(1,'#ffe9ff');
+    ctx.fillStyle = g; ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+    // พื้นล่างนุ่ม ๆ
+    ctx.fillStyle = '#d1fae5';
+    ctx.fillRect(0,HEIGHT-30,WIDTH,30);
+
+    // ท่อ
+    for(const p of pipes){
+      drawPipe(p);
+    }
+
+    // ผู้เล่น
+    if(player.img){
+      ctx.drawImage(player.img, player.x, player.y, player.w, player.h);
+    } else {
+      // Fallback วาดวงกลม
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath(); ctx.arc(player.x+player.w/2, player.y+player.h/2, player.w/2, 0, Math.PI*2); ctx.fill();
+    }
+
+    // UI
+    ctx.fillStyle = 'rgba(0,0,0,.6)';
+    ctx.font = 'bold 22px ui-sans-serif, system-ui';
+    ctx.fillText('คะแนน: '+score, 14, 30);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.font = '14px ui-sans-serif, system-ui';
+    ctx.fillText('สถิติสูงสุด: '+best, 14, 52);
+
+    if(!playing){
+      overlay('คลิกปุ่ม "เริ่มใหม่" หรือกด Space เพื่อเริ่ม', 0.75);
+    } else if(gameOver){
+      overlay('จบเกม! คลิก/กด Space เพื่อเริ่มใหม่', 0.75);
+    }
+  }
+
+  function drawPipe(p){
+    const pipeW = 60; const r = 10;
+    const topH = p.topH; const bottomY = p.topH + PIPE_GAP;
+
+    // ท่อบน
+    ctx.fillStyle = '#a3e635';
+    roundRect(ctx, p.x, 0, pipeW, topH, r); ctx.fill();
+    // ท่อล่าง
+    roundRect(ctx, p.x, bottomY, pipeW, HEIGHT-bottomY-30, r); ctx.fill();
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  // เริ่มด้วยสถานะ "รอเริ่ม"
+  playing = false; draw();
+
+  function overlay(text, alpha=0.7){
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.fillRect(18, HEIGHT*0.35, WIDTH-36, 120);
+    ctx.strokeStyle = 'rgba(0,0,0,.08)'; ctx.strokeRect(18.5, HEIGHT*0.35+0.5, WIDTH-37, 119);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '16px ui-sans-serif, system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, WIDTH/2, HEIGHT*0.35+66);
+    ctx.textAlign = 'start';
+  }
+  </script>
+</body>
+</html>
