@@ -1,0 +1,85 @@
+name: Update scores.json from issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write     # ให้สิทธิ์แก้ไฟล์ในรีโป
+  issues: write       # คอมเมนต์/ปิด issue ได้
+
+jobs:
+  update-scores:
+    # ทำงานเฉพาะ issue ที่มีแท็กนี้ในเนื้อหา (จะฝังจากหน้าเกม)
+    if: contains(github.event.issue.body, '<!-- FLAPPY_SCORE_V1 -->')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure jq exists
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Extract JSON block from issue body
+        id: parse
+        shell: bash
+        run: |
+          cat > issue_body.txt <<'EOF'
+          ${{ github.event.issue.body }}
+          EOF
+
+          # หาโค้ดบล็อค ```json ... ```
+          START=$(grep -n '```json' issue_body.txt | head -n1 | cut -d: -f1 || true)
+          ENDREL=$(tail -n +$((START+1)) issue_body.txt | grep -n '```' | head -n1 | cut -d: -f1 || true)
+          if [ -z "$START" ] || [ -z "$ENDREL" ]; then
+            echo "No JSON block found"; exit 1
+          fi
+          END=$((START + ENDREL - 1))
+          sed -n "$((START+1)),$END p" issue_body.txt > run.json
+
+          # ตรวจว่าพาร์สได้
+          jq . run.json
+
+          echo "name=$(jq -r .name run.json)"         >> $GITHUB_OUTPUT
+          echo "score=$(jq -r .score run.json)"       >> $GITHUB_OUTPUT
+          echo "speed=$(jq -r .speed run.json)"       >> $GITHUB_OUTPUT
+          echo "ts=$(jq -r .ts run.json)"             >> $GITHUB_OUTPUT
+
+      - name: Update scores.json
+        shell: bash
+        run: |
+          # ถ้าไม่มีไฟล์ ให้สร้างอาเรย์ว่าง
+          [ -f scores.json ] || echo "[]" > scores.json
+
+          # เพิ่มรายการใหม่
+          tmp=$(mktemp)
+          jq --arg name "${{ steps.parse.outputs.name }}" \
+             --argjson score "${{ steps.parse.outputs.score }}" \
+             --arg speed "${{ steps.parse.outputs.speed }}" \
+             --argjson ts "${{ steps.parse.outputs.ts }}" \
+             '. + [{"name":$name,"score":$score,"speed":$speed,"ts":$ts}]' scores.json > "$tmp"
+
+          # จัดอันดับ: คะแนนมากก่อน, ถ้าเท่ากันเอาเวลาที่เก่ากว่าไว้ก่อน แล้วตัดท็อป 100
+          jq 'sort_by(-.score, .ts) | .[:100]' "$tmp" > scores.json
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update scores.json from issue #${{ github.event.issue.number }}"
+          file_pattern: scores.json
+
+      - name: Comment and close issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: issue.number,
+              body: "คะแนนถูกบันทึกแล้วใน `scores.json` ✅"
+            });
+            await github.rest.issues.update({
+              ...context.repo,
+              issue_number: issue.number,
+              state: "closed"
+            });
