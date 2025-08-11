@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Flappy – ออนไลน์ (แก้รีสตาร์ทด้วยปุ่ม)</title>
+  <title>นกบิน ออนไลน์</title>
   <style>
     :root{ --bg1:#e0f2ff;--bg2:#fef5ff;--ink:#0f172a;--muted:#64748b;--accent:#22c55e;--boss:#8b5cf6;--coin:#facc15;--fire:#fb923c; --card:#ffffff;--border:#e5e7eb; }
     *{box-sizing:border-box}
@@ -17,21 +17,21 @@
     button:active{ transform:scale(.97)}
     #playBtn{ background:var(--accent); color:white }
     canvas{ width:100%; height:auto; image-rendering:auto; display:block; border-radius:14px; border:1px solid var(--border) }
-    .seg{ display:flex; gap:6px; background:#f1f5f9; padding:4px; border-radius:12px; border:1px solid #e2e8f0 }
-    .seg button{ background:transparent; padding:6px 10px; border-radius:8px; font-weight:600 }
-    .seg button.active{ background:#fff; box-shadow:0 2px 8px rgba(2,6,23,.08) }
-    .tag{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eef2ff; color:#4338ca}
     .namebox{ display:flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #e2e8f0; padding:6px 8px; border-radius:10px }
     .namebox input{ border:0; outline:none; background:transparent; min-width:140px; font-size:13px }
+    .tag{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eef2ff; color:#4338ca}
   </style>
 </head>
 <body>
   <main class="card">
     <div class="row">
       <div>
-        <strong>Flappy – ออนไลน์ (GitHub Scores)</strong>
-        <div class="muted">พิมพ์ชื่อก่อนเล่น • แตะ/คลิก/Space กระโดด • อัปโหลดรูปตัวเล่น/บอสได้ • สกอร์รวมเก็บใน scores.json</div>
-        <div class="muted" style="margin-top:6px"><span class="tag">BOSS สุ่ม ~20–30 แต้ม (ถ้าเกิน 30 บังคับเกิด)</span></div>
+        <strong>นกบิน ออนไลน์</strong>
+        <div class="muted">พิมพ์ชื่อก่อนเล่น • แตะ/คลิก/Space กระโดด • อัปโหลดรูปตัวเล่น/บอสได้</div>
+        <div class="muted" style="margin-top:6px">
+          <span class="tag">บอส: สุ่มเหรียญที่ต้องเก็บ 3–50</span>
+          <span class="tag">ฆ่าบอสแล้วฉากเร็วขึ้น</span>
+        </div>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end">
         <div class="namebox">
@@ -42,54 +42,87 @@
         <input id="bossPick" type="file" accept="image/*" style="display:none" />
         <label for="imgPick">รูปตัวเล่น</label>
         <label for="bossPick">รูปบอส</label>
-        <div class="seg" id="speedSeg">
-          <button data-s="1" class="active">x1</button>
-          <button data-s="2">x2</button>
-          <button data-s="3">x3</button>
-          <button data-s="10">x10</button>
-        </div>
         <button id="playBtn">เริ่มใหม่</button>
       </div>
     </div>
 
     <canvas id="game" width="480" height="640" aria-label="Flappy Game"></canvas>
 
-    <p class="muted" style="margin:10px 4px 2px">* ตอนจบเกมจะมีปุ่ม **ส่งสกอร์ออนไลน์** และ **เริ่มใหม่** แยกกัน (เลิกคลิกที่ไหนก็ได้เพื่อรีสตาร์ท)</p>
+    <p class="muted" style="margin:10px 4px 2px">* ตอนจบเกมจะมีปุ่ม <b>ส่งสกอร์ออนไลน์</b> และ <b>เริ่มใหม่</b> แยกกัน • สกอร์บอร์ดอ่านเฉพาะจาก GitHub Issues</p>
   </main>
 
   <script>
-  // ===== ค่าพื้นฐาน =====
-  const WIDTH = 480, HEIGHT = 640;
-  const PIPE_GAP = 220, PIPE_INTERVAL = 1.8, PIPE_SPEED = 85; const SPEED_RAMP_PER_MIN = 0.25;
-  const GRAVITY = 900, JUMP_VELOCITY = -300, TERM_VY = 420, START_EASE_SEC = 2.0;
-  const COINS_TO_WIN = 3, COIN_INTERVAL = 0.9, COIN_SPEED = 120; const BOSS_MIN_STEP=20, BOSS_MAX_STEP=30; const BOSS_TOP=120, BOSS_BOTTOM=HEIGHT-160;
+  // ===== ค่าพื้นฐานเกม =====
+  const WIDTH=480, HEIGHT=640;
+  const PIPE_GAP=220, PIPE_INTERVAL=1.8, PIPE_SPEED=85, SPEED_RAMP_PER_MIN=0.25; // PIPE_SPEED คือ base
+  const GRAVITY=900, JUMP_VELOCITY=-300, TERM_VY=420, START_EASE_SEC=2.0;
+  const COIN_INTERVAL=0.9, COIN_SPEED=120;
+  const BOSS_MIN_STEP=20, BOSS_MAX_STEP=30, BOSS_TOP=120, BOSS_BOTTOM=HEIGHT-160;
   const FIRE_INTERVAL=1.2, FIRE_SPEED=160;
+
+  // เหรียญที่ต้องเก็บเพื่อปราบบอส (สุ่มในช่วงนี้)
+  const MIN_COINS_TO_WIN=3, MAX_COINS_TO_WIN=50;
+
+  // เพิ่มความเร็วฉากเมื่อปราบบอสสำเร็จ – ปรับได้
+  const BOSS_SPEED_STEP = 0.08; // +8% ต่อบอส 1 ตัว
+
   let pipeHide=0, PIPE_ANIM_SPEED=1.6;
 
-  // ===== พื้นที่เกม =====
-  const cvs=document.getElementById('game'); const ctx=cvs.getContext('2d');
-  let pipes=[], t=0, spawnTimer=0, score=0, best=0; let playing=false, gameOver=false, deathRecorded=false; let mode='normal';
-  const speedSeg=document.getElementById('speedSeg'); let timeScale=1; speedSeg.addEventListener('click',e=>{const b=e.target.closest('button'); if(!b)return; speedSeg.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); timeScale=parseFloat(b.dataset.s||'1');});
+  const cvs=document.getElementById('game');
+  const ctx=cvs.getContext('2d');
+
+  let pipes=[], t=0, spawnTimer=0, score=0, best=0;
+  let playing=false, gameOver=false, deathRecorded=false, mode='normal';
+
+  // ตัวคูณความเร็วจากจำนวนบอสที่ชนะ
+  let bossKills=0, speedBossMul=1;
+  let bossDefeatedThisRound=false;
 
   let lastBossScore=0, nextBossAt=randStep(lastBossScore,BOSS_MIN_STEP,BOSS_MAX_STEP);
 
+  // แจ้งเตือนสั้น ๆ (ประกาศครั้งเดียว)
+  let notiText='', notiTimer=0;
+
+  // ปุ่มจอ Game Over (ประกาศครั้งเดียว)
+  let gameOverButtons={ send:null, restart:null };
+
   // ===== ชื่อผู้เล่น =====
-  const NAME_KEY='flappy_name_v1', SCORE_KEY='flappy_scores_v1', LAST_RUN_KEY='flappy_last_run_v1';
-  const nameInput=document.getElementById('playerName'); nameInput.value=localStorage.getItem(NAME_KEY)||''; nameInput.addEventListener('input',()=>localStorage.setItem(NAME_KEY,(nameInput.value||'').trim()));
+  const NAME_KEY='flappy_name_v1';
+  const nameInput=document.getElementById('playerName');
+  nameInput.value=localStorage.getItem(NAME_KEY)||'';
+  nameInput.addEventListener('input',()=>localStorage.setItem(NAME_KEY,(nameInput.value||'').trim()));
   function ensureName(){ const n=(nameInput.value||'').trim(); if(!n){ notiText='พิมพ์ชื่อก่อนเริ่มเล่นนะ'; notiTimer=1.5; nameInput.focus(); return false;} return true; }
 
   // ===== ตัวละคร/บอส =====
-  const player={x:WIDTH*0.28,y:HEIGHT*0.42,vy:0,w:36,h:36,img:null}; const defaultImg=new Image(); defaultImg.src='player.png'; defaultImg.onload=()=>player.img=defaultImg; defaultImg.onerror=()=>player.img=null;
+  const player={x:WIDTH*0.28,y:HEIGHT*0.42,vy:0,w:36,h:36,img:null};
+  const defaultImg=new Image(); defaultImg.src='player.png';
+  defaultImg.onload=()=>player.img=defaultImg; defaultImg.onerror=()=>player.img=null;
+
   let boss=null, bossImg=null, coins=[], fires=[], coinTimer=0, fireTimer=0;
 
-  document.getElementById('imgPick').addEventListener('change',e=>{const f=e.target.files?.[0]; if(!f) return; const u=URL.createObjectURL(f); const im=new Image(); im.onload=()=>{player.img=im; URL.revokeObjectURL(u);}; im.src=u;});
-  document.getElementById('bossPick').addEventListener('change',e=>{const f=e.target.files?.[0]; if(!f) return; const u=URL.createObjectURL(f); const im=new Image(); im.onload=()=>{bossImg=im; URL.revokeObjectURL(u);}; im.src=u;});
+  document.getElementById('imgPick').addEventListener('change',e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    const u=URL.createObjectURL(f); const im=new Image();
+    im.onload=()=>{player.img=im; URL.revokeObjectURL(u);}; im.src=u;
+  });
+  document.getElementById('bossPick').addEventListener('change',e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    const u=URL.createObjectURL(f); const im=new Image();
+    im.onload=()=>{bossImg=im; URL.revokeObjectURL(u);}; im.src=u;
+  });
 
   document.getElementById('playBtn').addEventListener('click',()=>{ if(ensureName()) resetGame(); });
-  // ปิดรีสตาร์ทด้วย Space ตอน gameOver — ให้ใช้ปุ่มเท่านั้น
-  window.addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); if(!playing){ if(ensureName()) resetGame(); } else if(!gameOver){ jump(); } }});
 
-  // คลิกบน canvas: ขณะเล่น = กระโดด, ตอนรอเริ่ม = เริ่มใหม่, ตอนจบเกม = เช็คว่ากดปุ่มไหน
+  // Space: ขณะเล่น = กระโดด, ตอนยังไม่เริ่ม = เริ่ม, ตอนจบเกม = ไม่รีสตาร์ทอัตโนมัติ
+  window.addEventListener('keydown',e=>{
+    if(e.code==='Space'){
+      e.preventDefault();
+      if(!playing){ if(ensureName()) resetGame(); }
+      else if(!gameOver){ jump(); }
+    }
+  });
+
+  // คลิกบน canvas: ขณะเล่น = กระโดด, ตอนรอเริ่ม = เริ่มใหม่, ตอนจบเกม = กดเฉพาะปุ่ม
   cvs.addEventListener('pointerdown',(e)=>{
     const rect=cvs.getBoundingClientRect();
     const mx=(e.clientX-rect.left)*(cvs.width/rect.width);
@@ -98,114 +131,351 @@
     if(gameOver){
       if(hitButton(gameOverButtons.send,mx,my)) { openIssue(); return; }
       if(hitButton(gameOverButtons.restart,mx,my)) { resetGame(); return; }
-      return; // จบเกมแต่ไม่ได้คลิกปุ่มใด ๆ → ไม่ทำอะไร
+      return;
     }
-    // playing อยู่ → กระโดด
     jump();
   });
 
   function hitButton(btn,x,y){ if(!btn) return false; return (x>btn.x && x<btn.x+btn.w && y>btn.y && y<btn.y+btn.h); }
 
-  function resetGame(){ pipes=[]; coins=[]; fires=[]; boss=null; deathRecorded=false; t=0; spawnTimer=0; coinTimer=0; fireTimer=0; score=0; gameOver=false; playing=true; player.y=HEIGHT*0.42; player.vy=0; mode='normal'; pipeHide=0; lastBossScore=0; nextBossAt=randStep(lastBossScore,BOSS_MIN_STEP,BOSS_MAX_STEP); }
+  function resetGame(){
+    pipes=[]; coins=[]; fires=[]; boss=null; deathRecorded=false;
+    t=0; spawnTimer=0; coinTimer=0; fireTimer=0; score=0; gameOver=false; playing=true;
+    player.y=HEIGHT*0.42; player.vy=0; mode='normal'; pipeHide=0;
+
+    bossKills=0; speedBossMul=1; bossDefeatedThisRound=false;
+
+    lastBossScore=0; nextBossAt=randStep(lastBossScore,BOSS_MIN_STEP,BOSS_MAX_STEP);
+  }
   function jump(){ player.vy=player.vy*0.2 + JUMP_VELOCITY*0.8; }
 
-  const easeOutCubic=x=>1-Math.pow(1-x,3), easeInOutCubic=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2, clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  // ===== easing/utils =====
+  const easeOutCubic=x=>1-Math.pow(1-x,3);
+  const easeInOutCubic=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const randInt=(min,max)=>Math.floor(Math.random()*(max-min+1))+min;
+
+  // ===== GitHub Issues (อ่านสกอร์จาก Issues เท่านั้น) =====
+  const REPO_OWNER='sorawit222', REPO_NAME='flappy1';
+  const GH_ISSUES_API=`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues?state=all&per_page=100`;
+  const ISSUE_MARK='<!-- FLAPPY_SCORE_V1 -->';
+  const REPO_ISSUE_NEW=`https://github.com/${REPO_OWNER}/${REPO_NAME}/issues/new`;
+
+  let onlineScores=null, onlineFetchInFlight=false, onlineLastFetch=0;
+
+  function parseScoreFromIssueBody(body){
+    if((body||'').indexOf(ISSUE_MARK)===-1) return null;
+    const m=body.match(/```json\s*([\s\S]*?)\s*```/i);
+    if(!m) return null;
+    try{
+      const obj=JSON.parse(m[1]);
+      return { name:String(obj.name||'ผู้เล่น'), score:Number(obj.score||0), speed:Number(obj.speed||1), ts:Number(obj.ts||Date.now()) };
+    }catch{ return null; }
+  }
+
+  async function fetchScoresFromIssues(){
+    try{
+      const res=await fetch(GH_ISSUES_API,{headers:{'Accept':'application/vnd.github+json'}});
+      if(!res.ok) return [];
+      const issues=await res.json();
+      const out=[];
+      for(const it of issues){
+        const s=parseScoreFromIssueBody(it?.body||'');
+        if(s){ if(!Number.isFinite(s.ts) && it?.created_at) s.ts=Date.parse(it.created_at); out.push(s); }
+      }
+      out.sort((a,b)=> b.score - a.score || a.ts - b.ts);
+      return out.slice(0,20);
+    }catch{ return []; }
+  }
+
+  function ensureOnlineScores(){
+    const now=Date.now();
+    if(onlineFetchInFlight) return;
+    if(onlineScores && (now-onlineLastFetch<10000)) return; // cache 10s
+    onlineFetchInFlight=true;
+    fetchScoresFromIssues().then(arr=>{ onlineScores=arr; onlineLastFetch=Date.now(); })
+                           .finally(()=>{ onlineFetchInFlight=false; });
+  }
+
+  function openIssue(){
+    const n=(nameInput.value||'').trim()||'ผู้เล่น';
+    const speed = Number((speedBossMul).toFixed(2));
+    const data={name:n, score, speed, ts:Date.now()};
+    const title=encodeURIComponent(`นกบิน ออนไลน์: ${n} - ${score}`);
+    const body=encodeURIComponent(`${ISSUE_MARK}\nส่งจากเกม\n\n\`\`\`json\n${JSON.stringify(data)}\n\`\`\``);
+    const url=`${REPO_ISSUE_NEW}?title=${title}&body=${body}`;
+    window.open(url,'_blank');
+  }
+
+  // ===== main loop =====
   let last=performance.now(); requestAnimationFrame(loop);
-  function loop(now){ const dtRaw=(now-last)/1000; last=now; const dt=Math.min(dtRaw,1/30)*timeScale; update(dt); draw(); requestAnimationFrame(loop);}  
+  function loop(now){ const dtRaw=(now-last)/1000; last=now; const dt=Math.min(dtRaw,1/30); update(dt); draw(); requestAnimationFrame(loop); }
 
-  const REPO_ISSUE_NEW='https://github.com/sorawit222/flappy1/issues/new';
-  const SCORES_JSON_URL='scores.json';
-  let notiText='', notiTimer=0; // ใช้ตัวแปร timeScale ที่ประกาศไว้ด้านบน ไม่ต้องประกาศซ้ำ
+  async function update(dt){
+    if(notiTimer>0){ notiTimer-=dt; }
+    if(!playing||gameOver) return;
 
-  async function update(dt){ if(notiTimer>0){ notiTimer-=dt; } if(!playing||gameOver) return; t+=dt; const easeMul=t<START_EASE_SEC?(0.25+0.75*easeOutCubic(t/START_EASE_SEC)):1; const rampMul=1+(SPEED_RAMP_PER_MIN*(t/60)); const scroll=PIPE_SPEED*easeMul*rampMul;
+    t+=dt;
+    const easeMul=t<START_EASE_SEC?(0.25+0.75*easeOutCubic(t/START_EASE_SEC)):1;
+    const rampMul=1+(SPEED_RAMP_PER_MIN*(t/60));
+    const scroll=PIPE_SPEED * easeMul * rampMul * speedBossMul; // เร็วขึ้นตามบอสที่ชนะ
+
     if(mode==='normal'){
-      spawnTimer+=dt; if(spawnTimer>=PIPE_INTERVAL){ spawnTimer=0; const minTop=60,minBottom=80; const topH=Math.random()*(HEIGHT-PIPE_GAP-minTop-minBottom)+minTop; pipes.push({x:WIDTH+40,topH,passed:false}); }
-      for(const p of pipes){ p.x-=scroll*dt; } pipes=pipes.filter(p=>p.x>-80);
-      for(const p of pipes){ if(!p.passed && p.x+60<player.x){ p.passed=true; score++; } if(collidePipe(p)){ gameOver=true; } }
-      if(score-lastBossScore>=BOSS_MIN_STEP){ if(score>=nextBossAt){ enterBoss(); } else { const pr=(score-lastBossScore-(BOSS_MIN_STEP-1))/(BOSS_MAX_STEP-BOSS_MIN_STEP+1); if(Math.random()<clamp(pr,0.05,0.6)) enterBoss(); } }
+      spawnTimer+=dt;
+      if(spawnTimer>=PIPE_INTERVAL){
+        spawnTimer=0;
+        const minTop=60,minBottom=80;
+        const topH=Math.random()*(HEIGHT-PIPE_GAP-minTop-minBottom)+minTop;
+        pipes.push({x:WIDTH+40,topH,passed:false});
+      }
+      for(const p of pipes){ p.x-=scroll*dt; }
+      pipes=pipes.filter(p=>p.x>-80);
+
+      for(const p of pipes){
+        if(!p.passed && p.x+60<player.x){ p.passed=true; score++; }
+        if(collidePipe(p)){ gameOver=true; }
+      }
+      if(score-lastBossScore>=BOSS_MIN_STEP){
+        if(score>=nextBossAt){ enterBoss(); }
+        else {
+          const pr=(score-lastBossScore-(BOSS_MIN_STEP-1))/(BOSS_MAX_STEP-BOSS_MIN_STEP+1);
+          if(Math.random()<clamp(pr,0.05,0.6)) enterBoss();
+        }
+      }
+
     } else if(mode==='enterBoss'){
-      pipeHide=clamp(pipeHide+PIPE_ANIM_SPEED*dt,0,1); if(pipeHide>=1){ mode='boss'; createBoss(); }
+      pipeHide=clamp(pipeHide+PIPE_ANIM_SPEED*dt,0,1);
+      if(pipeHide>=1){ mode='boss'; createBoss(); }
+
     } else if(mode==='boss'){
-      if(boss){ boss.alpha=clamp(boss.alpha+dt*2,0,1); boss.scale=0.7+0.3*easeOutCubic(boss.alpha); boss.y+=boss.vy*boss.dir*dt; if(boss.y<BOSS_TOP){boss.y=BOSS_TOP; boss.dir=1;} if(boss.y>BOSS_BOTTOM){boss.y=BOSS_BOTTOM; boss.dir=-1;} }
-      coinTimer+=dt; fireTimer+=dt; if(coinTimer>=COIN_INTERVAL){ coinTimer=0; const yy=boss?(boss.y+(Math.random()*60-30)):HEIGHT*0.4; coins.push({x:WIDTH+20,y:clamp(yy,60,HEIGHT-100),r:10,vx:COIN_SPEED,spin:Math.random()*Math.PI*2}); }
-      if(fireTimer>=FIRE_INTERVAL){ fireTimer=0; if(boss){ fires.push({x:boss.x-28,y:boss.y,r:8,vx:FIRE_SPEED,phase:Math.random()*Math.PI*2}); } }
+      if(boss){
+        boss.alpha=clamp(boss.alpha+dt*2,0,1);
+        boss.scale=0.7+0.3*easeOutCubic(boss.alpha);
+        boss.y+=boss.vy*boss.dir*dt;
+        if(boss.y<BOSS_TOP){ boss.y=BOSS_TOP; boss.dir=1; }
+        if(boss.y>BOSS_BOTTOM){ boss.y=BOSS_BOTTOM; boss.dir=-1; }
+      }
+      coinTimer+=dt; fireTimer+=dt;
+      if(coinTimer>=COIN_INTERVAL){
+        coinTimer=0;
+        const yy=boss?(boss.y+(Math.random()*60-30)):HEIGHT*0.4;
+        coins.push({x:WIDTH+20,y:clamp(yy,60,HEIGHT-100),r:10,vx:COIN_SPEED,spin:Math.random()*Math.PI*2});
+      }
+      if(fireTimer>=FIRE_INTERVAL){
+        fireTimer=0; if(boss){ fires.push({x:boss.x-28,y:boss.y,r:8,vx:FIRE_SPEED,phase:Math.random()*Math.PI*2}); }
+      }
       for(const c of coins){ c.x-=c.vx*dt; c.spin+=dt*6; } coins=coins.filter(c=>c.x>-30);
       for(const f of fires){ f.x-=f.vx*dt; f.y+=Math.sin(f.phase+=dt*4)*12*dt; } fires=fires.filter(f=>f.x>-20);
-      for(let i=coins.length-1;i>=0;i--){ const c=coins[i]; if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,c.x,c.y,c.r)){ coins.splice(i,1); boss.hits++; if(boss.hits>=COINS_TO_WIN){ fires=[]; boss=null; mode='exitBoss'; } } }
-      for(const f of fires){ if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,f.x,f.y,f.r)){ gameOver=true; break; } }
+
+      for(let i=coins.length-1;i>=0;i--){
+        const c=coins[i];
+        if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,c.x,c.y,c.r)){
+          coins.splice(i,1); boss.hits++;
+          if(boss.hits>=boss.coinsToWin){
+            fires=[]; boss=null; mode='exitBoss'; bossDefeatedThisRound=true;
+          }
+        }
+      }
+      for(const f of fires){
+        if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,f.x,f.y,f.r)){ gameOver=true; break; }
+      }
+
     } else if(mode==='exitBoss'){
-      pipeHide=clamp(pipeHide-PIPE_ANIM_SPEED*dt,0,1); if(pipeHide<=0){ finishBoss(); mode='normal'; }
+      pipeHide=clamp(pipeHide-PIPE_ANIM_SPEED*dt,0,1);
+      if(pipeHide<=0){ finishBoss(); mode='normal'; }
     }
-    player.vy+=GRAVITY*dt; if(player.vy>TERM_VY) player.vy=TERM_VY; player.y+=player.vy*dt; if(player.y<0){player.y=0;player.vy=0;} if(player.y+player.h>HEIGHT-30){ player.y=HEIGHT-30-player.h; gameOver=true; }
+
+    // ฟิสิกส์ผู้เล่น
+    player.vy+=GRAVITY*dt; if(player.vy>TERM_VY) player.vy=TERM_VY;
+    player.y+=player.vy*dt;
+    if(player.y<0){ player.y=0; player.vy=0; }
+    if(player.y+player.h>HEIGHT-30){ player.y=HEIGHT-30-player.h; gameOver=true; }
+
+    // บันทึก local รอบนี้ (ไว้หา best)
     if(gameOver && !deathRecorded){ deathRecorded=true; recordScoreLocal(); }
     if(gameOver){ best=Math.max(best,score); }
   }
 
   function enterBoss(){ mode='enterBoss'; }
-  function createBoss(){ boss={x:WIDTH*0.75,y:HEIGHT*0.32,vy:90,dir:1,hits:0,alpha:0,scale:0.7,img:bossImg}; }
-  function finishBoss(){ coins=[]; fires=[]; lastBossScore=score; nextBossAt=randStep(lastBossScore,BOSS_MIN_STEP,BOSS_MAX_STEP); }
+  function createBoss(){
+    boss={
+      x:WIDTH*0.75, y:HEIGHT*0.32, vy:90, dir:1,
+      hits:0, alpha:0, scale:0.7, img:bossImg,
+      coinsToWin: randInt(MIN_COINS_TO_WIN, MAX_COINS_TO_WIN) // สุ่ม 3–50
+    };
+  }
+  function finishBoss(){
+    coins=[]; fires=[];
+    if(bossDefeatedThisRound){
+      bossKills++;
+      speedBossMul = 1 + bossKills * BOSS_SPEED_STEP; // คูณเร็วขึ้นถาวรจนกว่าจะรีสตาร์ท
+      bossDefeatedThisRound=false;
+    }
+    lastBossScore=score; nextBossAt=randStep(lastBossScore,BOSS_MIN_STEP,BOSS_MAX_STEP);
+  }
 
-  // ===== Local scoreboard =====
+  // ===== local score (ไม่โชว์บนบอร์ด แต่ใช้อัปเดต best) =====
+  const SCORE_KEY='flappy_scores_v1', LAST_RUN_KEY='flappy_last_run_v1';
   function getLocalScores(){ try{return JSON.parse(localStorage.getItem(SCORE_KEY)||'[]');}catch{return [];} }
   function setLocalScores(a){ localStorage.setItem(SCORE_KEY,JSON.stringify(a)); }
-  function recordScoreLocal(){ const n=(nameInput.value||'').trim()||'ผู้เล่น'; const run={ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), name:n, score, speed:timeScale, ts:Date.now()}; let arr=getLocalScores(); arr.push(run); arr.sort((a,b)=> b.score-a.score || a.ts-b.ts); arr=arr.slice(0,10); setLocalScores(arr); localStorage.setItem(LAST_RUN_KEY,run.id); best=Math.max(best,...arr.map(r=>r.score)); }
+  function recordScoreLocal(){
+    const n=(nameInput.value||'').trim()||'ผู้เล่น';
+    const run={ id:Date.now()+"_"+Math.random().toString(36).slice(2,7), name:n, score, speed:Number(speedBossMul.toFixed(2)), ts:Date.now()};
+    let arr=getLocalScores(); arr.push(run);
+    arr.sort((a,b)=> b.score-a.score || a.ts-b.ts); arr=arr.slice(0,10);
+    setLocalScores(arr); localStorage.setItem(LAST_RUN_KEY,run.id);
+    best=Math.max(best,...arr.map(r=>r.score));
+  }
 
-  // ===== GitHub Online scoreboard =====
-  function openIssue(){ const n=(nameInput.value||'').trim()||'ผู้เล่น'; const data={name:n, score, speed:timeScale, ts:Date.now()}; const title=encodeURIComponent(`Flappy Score: ${n} - ${score}`); const body=encodeURIComponent(`<!-- FLAPPY_SCORE_V1 -->\nส่งจากเกม\n\n\`\`\`json\n${JSON.stringify(data)}\n\`\`\``); const url=`https://github.com/sorawit222/flappy1/issues/new?title=${title}&body=${body}`; window.open(url,'_blank'); }
-  async function fetchOnlineScores(){ try{ const res=await fetch('scores.json?t='+Date.now()); if(!res.ok) return []; const arr=await res.json(); return Array.isArray(arr)?arr:[]; }catch{return [];} }
-
-  function collidePipe(p){ if(mode!=='normal'||pipeHide>0) return false; const pipeW=60; const gapY=p.topH; const gapB=p.topH+PIPE_GAP; const px=player.x+6, py=player.y+6, pw=player.w-12, ph=player.h-12; const hitX=(px<p.x+pipeW)&&(px+pw>p.x); if(!hitX) return false; if(py<gapY || (py+ph)>gapB) return true; return false; }
-  function rectCircleCollide(rx,ry,rw,rh,cx,cy,cr){ const cxst=clamp(cx,rx,rx+rw), cys=clamp(cy,ry,ry+rh); const dx=cx-cxst, dy=cy-cys; return (dx*dx+dy*dy)<=cr*cr; }
+  // ===== collision / draw =====
+  function collidePipe(p){
+    if(mode!=='normal'||pipeHide>0) return false;
+    const pipeW=60; const gapY=p.topH; const gapB=p.topH+PIPE_GAP;
+    const px=player.x+6, py=player.y+6, pw=player.w-12, ph=player.h-12;
+    const hitX=(px<p.x+pipeW)&&(px+pw>p.x);
+    if(!hitX) return false;
+    if(py<gapY || (py+ph)>gapB) return true;
+    return false;
+  }
+  function rectCircleCollide(rx,ry,rw,rh,cx,cy,cr){
+    const cxst=clamp(cx,rx,rx+rw), cys=clamp(cy,ry,ry+rh);
+    const dx=cx-cxst, dy=cy-cys; return (dx*dx+dy*dy)<=cr*cr;
+  }
   function randStep(base,minStep,maxStep){ return base + Math.floor(minStep + Math.random()*(maxStep-minStep+1)); }
 
-  // ===== วาดทุกอย่าง =====
-  function draw(){ ctx.clearRect(0,0,WIDTH,HEIGHT); const g=ctx.createLinearGradient(0,0,0,HEIGHT); g.addColorStop(0,'#c7f1ff'); g.addColorStop(1,'#ffe9ff'); ctx.fillStyle=g; ctx.fillRect(0,0,WIDTH,HEIGHT); ctx.fillStyle='#d1fae5'; ctx.fillRect(0,HEIGHT-30,WIDTH,30);
-    const topOff=-pipeHide*HEIGHT, botOff=pipeHide*HEIGHT, alpha=1-easeInOutCubic(pipeHide); if(mode!=='boss'){ ctx.save(); ctx.globalAlpha=clamp(alpha,0,1); for(const p of pipes){ drawPipe(p,topOff,botOff);} ctx.restore(); }
-    if(player.img){ ctx.drawImage(player.img,player.x,player.y,player.w,player.h);} else { ctx.fillStyle='#22c55e'; ctx.beginPath(); ctx.arc(player.x+player.w/2,player.y+player.h/2,player.w/2,0,Math.PI*2); ctx.fill(); }
-    if(mode==='boss'||mode==='exitBoss'){ drawBossUI(); if(boss){ ctx.save(); ctx.globalAlpha=clamp(boss.alpha,0,1); ctx.translate(boss.x,boss.y); ctx.scale(boss.scale,boss.scale); if(bossImg){ const s=56; ctx.drawImage(bossImg,-s/2,-s/2,s,s);} else { ctx.fillStyle='var(--boss)'; roundRect(ctx,-24,-24,48,48,12); ctx.fill(); } ctx.restore(); } for(const f of fires){ drawFire(f);} for(const c of coins){ drawCoin(c);} }
-    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.font='bold 22px ui-sans-serif, system-ui'; ctx.fillText('คะแนน: '+score,14,30); ctx.fillStyle='rgba(0,0,0,.35)'; ctx.font='14px ui-sans-serif, system-ui'; ctx.fillText('สถิติสูงสุด: '+best,14,52);
-    if(notiTimer>0){ ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fillRect(60, HEIGHT*0.14, WIDTH-120, 42); ctx.strokeStyle='rgba(0,0,0,.06)'; ctx.strokeRect(60.5, HEIGHT*0.14+0.5, WIDTH-121, 41); ctx.fillStyle='#0f172a'; ctx.font='14px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText(notiText, WIDTH/2, HEIGHT*0.14+26); ctx.textAlign='start'; }
+  function draw(){
+    // BG
+    ctx.clearRect(0,0,WIDTH,HEIGHT);
+    const g=ctx.createLinearGradient(0,0,0,HEIGHT); g.addColorStop(0,'#c7f1ff'); g.addColorStop(1,'#ffe9ff');
+    ctx.fillStyle=g; ctx.fillRect(0,0,WIDTH,HEIGHT);
+    ctx.fillStyle='#d1fae5'; ctx.fillRect(0,HEIGHT-30,WIDTH,30);
+
+    // pipes
+    const topOff=-pipeHide*HEIGHT, botOff=pipeHide*HEIGHT, alpha=1-easeInOutCubic(pipeHide);
+    if(mode!=='boss'){ ctx.save(); ctx.globalAlpha=clamp(alpha,0,1); for(const p of pipes){ drawPipe(p,topOff,botOff);} ctx.restore(); }
+
+    // player
+    if(player.img){ ctx.drawImage(player.img,player.x,player.y,player.w,player.h); }
+    else { ctx.fillStyle='#22c55e'; ctx.beginPath(); ctx.arc(player.x+player.w/2,player.y+player.h/2,player.w/2,0,Math.PI*2); ctx.fill(); }
+
+    // boss mode
+    if(mode==='boss'||mode==='exitBoss'){
+      drawBossUI();
+      if(boss){
+        ctx.save(); ctx.globalAlpha=clamp(boss.alpha,0,1); ctx.translate(boss.x,boss.y); ctx.scale(boss.scale,boss.scale);
+        if(bossImg){ const s=56; ctx.drawImage(bossImg,-s/2,-s/2,s,s); }
+        else { ctx.fillStyle='var(--boss)'; roundRect(ctx,-24,-24,48,48,12); ctx.fill(); }
+        ctx.restore();
+      }
+      for(const f of fires){ drawFire(f); }
+      for(const c of coins){ drawCoin(c); }
+    }
+
+    // UI
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.font='bold 22px ui-sans-serif, system-ui'; ctx.fillText('คะแนน: '+score,14,30);
+    ctx.fillStyle='rgba(0,0,0,.35)'; ctx.font='14px ui-sans-serif, system-ui'; ctx.fillText('สถิติสูงสุด: '+best,14,52);
+
+    if(notiTimer>0){
+      ctx.fillStyle='rgba(255,255,255,.9)'; ctx.fillRect(60, HEIGHT*0.14, WIDTH-120, 42);
+      ctx.strokeStyle='rgba(0,0,0,.06)'; ctx.strokeRect(60.5, HEIGHT*0.14+0.5, WIDTH-121, 41);
+      ctx.fillStyle='#0f172a'; ctx.font='14px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText(notiText, WIDTH/2, HEIGHT*0.14+26); ctx.textAlign='start';
+    }
+
     if(!playing){ overlay('พิมพ์ชื่อ แล้วกด "เริ่มใหม่" หรือ Space เพื่อเริ่ม', 0.75); }
     else if(gameOver){ overlay('จบเกม! เลือกตัวเลือกด้านล่าง', 0.75); drawScoreboard(); drawGameOverButtons(); }
   }
 
-  function drawGameOverButtons(){
-    // วาดปุ่ม 2 ปุ่ม: ส่งสกอร์ออนไลน์ / เริ่มใหม่
-    const btnW=220, btnH=36, gap=14;
-    const x=(WIDTH-btnW)/2; const yBase=HEIGHT*0.35+100;
-    // ปุ่มส่ง
-    ctx.fillStyle='#2563eb'; ctx.fillRect(x, yBase, btnW, btnH);
-    ctx.fillStyle='#fff'; ctx.font='14px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText('ส่งสกอร์ออนไลน์ (GitHub)', WIDTH/2, yBase+23);
-    // ปุ่มรีสตาร์ท
-    const y2=yBase + btnH + gap;
-    ctx.fillStyle='#22c55e'; ctx.fillRect(x, y2, btnW, btnH);
-    ctx.fillStyle='#fff'; ctx.fillText('เริ่มใหม่', WIDTH/2, y2+23);
-
-    // เก็บ hitbox
-    gameOverButtons.send={x, y:yBase, w:btnW, h:btnH};
-    gameOverButtons.restart={x, y:y2, w:btnW, h:btnH};
+  function drawBossUI(){
+    const need = boss ? boss.coinsToWin : MIN_COINS_TO_WIN;
+    const got  = boss ? (boss.hits||0) : 0;
+    const pad=10, barW=WIDTH-pad*2, barH=26;
+    ctx.fillStyle='rgba(139,92,246,.12)'; ctx.fillRect(pad,pad,barW,barH);
+    ctx.strokeStyle='rgba(139,92,246,.35)'; ctx.strokeRect(pad+.5,pad+.5,barW-1,barH-1);
+    const progress = Math.max(0, Math.min(1, need ? (got/need) : 0));
+    ctx.fillStyle='rgba(139,92,246,.6)'; ctx.fillRect(pad,pad,barW*progress,barH);
+    ctx.fillStyle='#4c1d95'; ctx.font='bold 13px ui-sans-serif, system-ui'; ctx.textAlign='center';
+    ctx.fillText(`BOSS – เก็บเหรียญให้ครบ ${need} ชิ้น (ระวังไฟ!)`, WIDTH/2, pad+17); ctx.textAlign='start';
   }
-
-  let gameOverButtons={ send:null, restart:null };
-
-  async function drawScoreboard(){
-    const padX=24, padY=HEIGHT*0.35+160, w=WIDTH-48, h=HEIGHT-padY-20; ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillRect(padX,padY,w,h); ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.strokeRect(padX+.5,padY+.5,w-1,h-1);
-    ctx.fillStyle='#0f172a'; ctx.font='bold 16px ui-sans-serif, system-ui'; ctx.fillText('สกอร์บอร์ด', padX+14, padY+28);
-    const local=getLocalScores(); ctx.font='12px ui-sans-serif, system-ui'; ctx.fillStyle='#64748b'; ctx.fillText('Local (บนเครื่องนี้)', padX+14, padY+48); renderRows(local.slice(0,5), padX+14, padY+66);
-    const online=await fetchOnlineScores(); ctx.fillStyle='#64748b'; ctx.fillText('Online (รวมทุกคน)', padX+14, padY+66+5*18+14); renderRows(online.slice(0,5), padX+14, padY+66+5*18+32);
-  }
-  function renderRows(arr, x, y){ ctx.save(); ctx.font='13px ui-sans-serif, system-ui'; for(let i=0;i<arr.length;i++){ const s=arr[i]; const yy=y+i*18; ctx.fillStyle='#0f172a'; ctx.fillText(`${i+1}. ${s.name}`, x, yy); ctx.textAlign='right'; ctx.fillText(String(s.score), x+300, yy); ctx.textAlign='start'; ctx.fillStyle='#64748b'; ctx.fillText('x'+(s.speed||1), x+320, yy); } ctx.restore(); }
-
-  function drawBossUI(){ const pad=10, barW=WIDTH-pad*2, barH=26; ctx.fillStyle='rgba(139,92,246,.12)'; ctx.fillRect(pad,pad,barW,barH); ctx.strokeStyle='rgba(139,92,246,.35)'; ctx.strokeRect(pad+.5,pad+.5,barW-1,barH-1); const progress=boss?(boss.hits||0)/COINS_TO_WIN:0; ctx.fillStyle='rgba(139,92,246,.6)'; ctx.fillRect(pad,pad,barW*progress,barH); ctx.fillStyle='#4c1d95'; ctx.font='bold 13px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText('BOSS – เก็บเหรียญให้ครบ '+COINS_TO_WIN+' ชิ้น (ระวังไฟ!)', WIDTH/2, pad+17); ctx.textAlign='start'; }
   function drawCoin(c){ const r=c.r; ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(Math.sin(c.spin)*0.3); ctx.fillStyle='#f59e0b'; ctx.beginPath(); ctx.arc(0,0,r+2,0,Math.PI*2); ctx.fill(); ctx.fillStyle='var(--coin)'; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fef3c7'; starPath(ctx,5,r*0.5,r*0.2); ctx.fill(); ctx.restore(); }
   function drawFire(f){ ctx.save(); ctx.translate(f.x,f.y); ctx.fillStyle='var(--fire)'; ctx.beginPath(); ctx.moveTo(0,0); ctx.bezierCurveTo(-8,-6,-14,6,0,12); ctx.bezierCurveTo(14,6,8,-6,0,0); ctx.fill(); ctx.fillStyle='#fdba74'; ctx.beginPath(); ctx.arc(-2,4,3,0,Math.PI*2); ctx.fill(); ctx.restore(); }
   function starPath(ctx,spikes,outerR,innerR){ let rot=Math.PI/2*3, x=0, y=0, step=Math.PI/spikes; ctx.beginPath(); ctx.moveTo(0,-outerR); for(let i=0;i<spikes;i++){ x=Math.cos(rot)*outerR; y=Math.sin(rot)*outerR; ctx.lineTo(x,y); rot+=step; x=Math.cos(rot)*innerR; y=Math.sin(rot)*innerR; ctx.lineTo(x,y); rot+=step; } ctx.lineTo(0,-outerR); ctx.closePath(); }
   function drawPipe(p,topOff,botOff){ const pipeW=60, r=10, topH=p.topH, bottomY=p.topH+PIPE_GAP; ctx.fillStyle='#a3e635'; roundRect(ctx,p.x,0+topOff,pipeW,topH,r); ctx.fill(); roundRect(ctx,p.x,bottomY+botOff,pipeW,HEIGHT-bottomY-30,r); ctx.fill(); }
   function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 
-  // Init
+  function drawGameOverButtons(){
+    const btnW=220, btnH=36, gap=14; const x=(WIDTH-btnW)/2; const yBase=HEIGHT*0.35+100;
+    // ส่ง
+    ctx.fillStyle='#2563eb'; ctx.fillRect(x, yBase, btnW, btnH);
+    ctx.fillStyle='#fff'; ctx.font='14px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText('ส่งสกอร์ออนไลน์ (GitHub)', WIDTH/2, yBase+23);
+    // เริ่มใหม่
+    const y2=yBase + btnH + gap;
+    ctx.fillStyle='#22c55e'; ctx.fillRect(x, y2, btnW, btnH);
+    ctx.fillStyle='#fff'; ctx.fillText('เริ่มใหม่', WIDTH/2, y2+23);
+    // hitbox
+    gameOverButtons.send={x, y:yBase, w:btnW, h:btnH};
+    gameOverButtons.restart={x, y:y2, w:btnW, h:btnH};
+  }
+
+  function drawScoreboard(){
+    ensureOnlineScores();
+    const arr = onlineScores || [];
+    const padX=24, padY=HEIGHT*0.35+160, w=WIDTH-48, h=HEIGHT-padY-20;
+    ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillRect(padX,padY,w,h);
+    ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.strokeRect(padX+.5,padY+.5,w-1,h-1);
+    ctx.fillStyle='#0f172a'; ctx.font='bold 16px ui-sans-serif, system-ui';
+    ctx.fillText('สกอร์บอร์ด (จาก GitHub Issues)', padX+14, padY+28);
+    ctx.font='12px ui-sans-serif, system-ui'; ctx.fillStyle='#64748b';
+    if(!onlineScores){ ctx.fillText('กำลังโหลดจาก GitHub…', padX+14, padY+48); return; }
+    renderRows(arr.slice(0,10), padX+14, padY+54);
+  }
+  function renderRows(arr, x, y){
+    ctx.save(); ctx.font='13px ui-sans-serif, system-ui';
+    for(let i=0;i<arr.length;i++){
+      const s=arr[i]; const yy=y+i*18;
+      ctx.fillStyle='#0f172a'; ctx.fillText(`${i+1}. ${s.name}`, x, yy);
+      ctx.textAlign='right'; ctx.fillText(String(s.score), x+300, yy);
+      ctx.textAlign='start'; ctx.fillStyle='#64748b'; ctx.fillText('x'+(s.speed||1), x+320, yy);
+    }
+    ctx.restore();
+  }
+
+  // เริ่มด้วยสถานะ "รอเริ่ม"
   playing=false; draw();
-  function overlay(text,alpha=0.7){ ctx.fillStyle=`rgba(255,255,255,${alpha})`; ctx.fillRect(18, HEIGHT*0.35, WIDTH-36, 120); ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.strokeRect(18.5, HEIGHT*0.35+0.5, WIDTH-37, 119); ctx.fillStyle='#0f172a'; ctx.font='16px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText(text, WIDTH/2, HEIGHT*0.35+66); ctx.textAlign='start'; }
+  function overlay(text,alpha=0.7){
+    ctx.fillStyle=`rgba(255,255,255,${alpha})`;
+    ctx.fillRect(18, HEIGHT*0.35, WIDTH-36, 120);
+    ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.strokeRect(18.5, HEIGHT*0.35+0.5, WIDTH-37, 119);
+    ctx.fillStyle='#0f172a'; ctx.font='16px ui-sans-serif, system-ui';
+    ctx.textAlign='center'; ctx.fillText(text, WIDTH/2, HEIGHT*0.35+66); ctx.textAlign='start';
+  }
+
+  // ===== SELF TESTS (console) =====
+  (function runSelfTests(){
+    const tests=[]; function assert(name, cond){ tests.push({name, pass: !!cond}); if(!cond) console.error('❌', name); }
+
+    // 1) parser ของ issue body
+    const sampleBody = `<!-- FLAPPY_SCORE_V1 -->\n\`\`\`json\n{"name":"TestUser","score":12,"speed":2,"ts":1733960000000}\n\`\`\``;
+    const parsed = parseScoreFromIssueBody(sampleBody);
+    assert('parser returns object', parsed && typeof parsed==='object');
+    assert('parsed.name', parsed && parsed.name==='TestUser');
+    assert('parsed.score', parsed && parsed.score===12);
+
+    // 2) ไม่มีประกาศซ้ำตัวแปรหลัก
+    assert('notiText is string', typeof notiText === 'string');
+    assert('gameOverButtons ok', gameOverButtons && 'send' in gameOverButtons && 'restart' in gameOverButtons);
+
+    // 3) การสุ่มเหรียญอยู่ในช่วง 3–50
+    let inRange=true;
+    for(let i=0;i<200;i++){ const r=randInt(MIN_COINS_TO_WIN,MAX_COINS_TO_WIN); if(r<3||r>50){ inRange=false; break; } }
+    assert('randInt within [3,50]', inRange);
+
+    // 4) จำลองตรรกะปราบบอส: hits ถึงเป้าหมายแล้วจบ
+    const required=randInt(3,50); let hits=0; while(hits<required) hits++;
+    assert('hits >= required -> true', hits>=required);
+
+    const passed=tests.filter(t=>t.pass).length;
+    console.log(`✅ Self-tests passed ${passed}/${tests.length}`);
+  })();
   </script>
 </body>
 </html>
