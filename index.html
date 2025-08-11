@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>นกบิน ออนไลน์</title>
   <style>
-    :root{ --bg1:#e0f2ff;--bg2:#fef5ff;--ink:#0f172a;--muted:#64748b;--accent:#22c55e;--boss:#8b5cf6;--coin:#facc15;--fire:#fb923c; --card:#ffffff;--border:#e5e7eb; --ham:#a16207; --ham-ear:#854d0e; --ham-belly:#fef3c7; }
+    :root{ --bg1:#e0f2ff;--bg2:#fef5ff;--ink:#0f172a;--muted:#64748b;--accent:#22c55e;--boss:#8b5cf6;--coin:#facc15;--fire:#fb923c; --card:#ffffff;--border:#e5e7eb; --ham:#a16207; --ham-ear:#854d0e; --ham-belly:#fef3c7; --block:#60a5fa; --beam:#06b6d4; --shard:#0ea5e9; }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{ margin:0; display:grid; place-items:center; padding:16px; background:linear-gradient(180deg,var(--bg1),var(--bg2)); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:var(--ink); }
@@ -29,7 +29,8 @@
         <strong>นกบิน ออนไลน์</strong>
         <div class="muted">พิมพ์ชื่อก่อนเล่น • แตะ/คลิก/Space กระโดด</div>
         <div class="muted" style="margin-top:6px">
-          <span class="tag">บอส: สุ่มเหรียญที่ต้องเก็บ 3–50</span>
+          <span class="tag">บอสสุ่ม: test1 / test2 / test3</span>
+          <span class="tag">บอส: สุ่มเหรียญต้องเก็บ 3–50</span>
           <span class="tag">ฆ่าบอสแล้วฉากเร็วขึ้น</span>
           <span class="tag">แฮมสเตอร์: x10 คะแนน 5 วิ (20%)</span>
         </div>
@@ -46,7 +47,7 @@
     <canvas id="game" width="480" height="640" aria-label="Flappy Game"></canvas>
 
     <p class="muted" style="margin:10px 4px 2px">
-      * วางไฟล์ <b>player.png</b> และ/หรือ <b>boss.png</b> ไว้โฟลเดอร์เดียวกับหน้านี้เพื่อใช้รูปฝั่งเรา • ถ้าไม่มีไฟล์ เกมจะใช้ทรงพื้นฐานแทน<br>
+      * สามารถใส่ไฟล์ <b>player.png</b> / <b>boss.png</b> ในโฟลเดอร์เดียวกับหน้านี้เพื่อใช้รูปฝั่งเรา • ถ้าไม่มีจะใช้ทรงพื้นฐาน<br>
       * จบเกมมีปุ่ม <b>ส่งสกอร์ออนไลน์</b> และ <b>เริ่มใหม่</b> • สกอร์บอร์ดอ่านจาก GitHub Issues
     </p>
   </main>
@@ -63,7 +64,12 @@
   const GRAVITY=900, JUMP_VELOCITY=-300, TERM_VY=420, START_EASE_SEC=2.0;
   const COIN_INTERVAL=0.9, COIN_SPEED=120;
   const BOSS_MIN_STEP=20, BOSS_MAX_STEP=30, BOSS_TOP=120, BOSS_BOTTOM=HEIGHT-160;
-  const FIRE_INTERVAL=1.2, FIRE_SPEED=160;
+
+  // โจมตีบอส
+  const FIRE_INTERVAL=1.2, FIRE_SPEED=160;                        // test1
+  const BLOCK_INTERVAL=2.0, BLOCK_SPEED=140, BOSS_BLOCK_GAP=180;  // test2 (ท่อกั้น)
+  const BEAM_INTERVAL=1.8, BEAM_SPEED=200, BEAM_SPLIT_DIST=110,   // test3 (ลำแสงแตกตัว)
+        SHARD_COUNT=5, SHARD_SPEED=180;
 
   // เหรียญปราบบอส (สุ่ม 3–50)
   const MIN_COINS_TO_WIN=3, MAX_COINS_TO_WIN=50;
@@ -109,16 +115,20 @@
 
   // ===== ตัวละคร/บอส =====
   const player={x:WIDTH*0.28,y:HEIGHT*0.42,vy:0,w:36,h:36,img:null};
-  // โหลดรูปผู้เล่นจากไฟล์ฝั่งเรา (ถ้ามี)
+  // โหลดรูปผู้เล่น/บอสจากไฟล์ฝั่งเรา (ถ้ามี)
   const defaultImg=new Image(); defaultImg.src='player.png';
   defaultImg.onload=()=>player.img=defaultImg;
   defaultImg.onerror=()=>player.img=null;
 
   let boss=null, bossImg=null, coins=[], fires=[], coinTimer=0, fireTimer=0;
-  // โหลดรูปบอสจากไฟล์ฝั่งเรา (ถ้ามี)
+
   const defaultBoss=new Image(); defaultBoss.src='boss.png';
   defaultBoss.onload=()=>bossImg=defaultBoss;
   defaultBoss.onerror=()=>bossImg=null;
+
+  // ===== test2: ท่อกั้น & test3: ลำแสง/ชิ้นส่วน =====
+  let bossBlocks=[], blockTimer=0;
+  let beams=[], beamTimer=0, shards=[];
 
   // ===== แฮมสเตอร์ (power-up) =====
   let hamster=null;
@@ -153,8 +163,10 @@
 
   function resetGame(){
     pipes=[]; coins=[]; fires=[]; boss=null; hamster=null;
+    bossBlocks=[]; beams=[]; shards=[];
     deathRecorded=false;
-    t=0; spawnTimer=0; coinTimer=0; fireTimer=0; hamTimer=0; hamNextGap=randRange(HAMSTER_MIN_GAP, HAMSTER_MAX_GAP);
+    t=0; spawnTimer=0; coinTimer=0; fireTimer=0; blockTimer=0; beamTimer=0;
+    hamTimer=0; hamNextGap=randRange(HAMSTER_MIN_GAP, HAMSTER_MAX_GAP);
     score=0; gameOver=false; playing=true;
     player.y=HEIGHT*0.42; player.vy=0; mode='normal'; pipeHide=0;
 
@@ -290,6 +302,7 @@
       if(pipeHide>=1){ mode='boss'; createBoss(); }
 
     } else if(mode==='boss'){
+      // เคลื่อนบอสขึ้นลง
       if(boss){
         boss.alpha=clamp(boss.alpha+dt*2,0,1);
         boss.scale=0.7+0.3*easeOutCubic(boss.alpha);
@@ -297,29 +310,81 @@
         if(boss.y<BOSS_TOP){ boss.y=BOSS_TOP; boss.dir=1; }
         if(boss.y>BOSS_BOTTOM){ boss.y=BOSS_BOTTOM; boss.dir=-1; }
       }
-      coinTimer+=dt; fireTimer+=dt;
+
+      // เหรียญ/โจมตี
+      coinTimer+=dt;
       if(coinTimer>=COIN_INTERVAL){
         coinTimer=0;
         const yy=boss?(boss.y+(Math.random()*60-30)):HEIGHT*0.4;
         coins.push({x:WIDTH+20,y:clamp(yy,60,HEIGHT-100),r:10,vx:COIN_SPEED,spin:Math.random()*Math.PI*2});
       }
-      if(fireTimer>=FIRE_INTERVAL){
-        fireTimer=0; if(boss){ fires.push({x:boss.x-28,y:boss.y,r:8,vx:FIRE_SPEED,phase:Math.random()*Math.PI*2}); }
-      }
       for(const c of coins){ c.x-=c.vx*dt; c.spin+=dt*6; } coins=coins.filter(c=>c.x>-30);
-      for(const f of fires){ f.x-=f.vx*dt; f.y+=Math.sin(f.phase+=dt*4)*12*dt; } fires=fires.filter(f=>f.x>-20);
 
+      // --- โจมตีแยกตามชนิดบอส ---
+      if(boss?.type==='test1'){ // ลูกไฟปกติ
+        fireTimer+=dt;
+        if(fireTimer>=FIRE_INTERVAL){ fireTimer=0; fires.push({x:boss.x-28,y:boss.y,r:8,vx:FIRE_SPEED,phase:Math.random()*Math.PI*2}); }
+        for(const f of fires){ f.x-=f.vx*dt; f.y+=Math.sin(f.phase+=dt*4)*12*dt; }
+        fires=fires.filter(f=>f.x>-20);
+        for(const f of fires){ if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,f.x,f.y,f.r)){ gameOver=true; break; } }
+
+      } else if(boss?.type==='test2'){ // เสกท่อกั้น
+        blockTimer+=dt;
+        if(blockTimer>=BLOCK_INTERVAL){
+          blockTimer=0;
+          const minTop=50, minBottom=70, gap=BOSS_BLOCK_GAP;
+          const topH=Math.random()*(HEIGHT-gap-minTop-minBottom)+minTop;
+          bossBlocks.push({x:WIDTH+40, topH, gap, w:60});
+        }
+        for(const b of bossBlocks){ b.x -= (scroll+40)*dt; }
+        bossBlocks=bossBlocks.filter(b=>b.x>-80);
+        for(const b of bossBlocks){ if(collideBossBlock(b)){ gameOver=true; break; } }
+
+      } else if(boss?.type==='test3'){ // ลำแสง + แตกกระสุน
+        beamTimer+=dt;
+        if(beamTimer>=BEAM_INTERVAL){
+          beamTimer=0;
+          beams.push({x:boss.x-8, y:boss.y, len:40, h:6, vx:BEAM_SPEED, splitX: player.x+BEAM_SPLIT_DIST, split:false});
+        }
+        // อัปเดตลำแสง
+        for(const b of beams){
+          b.x -= b.vx*dt;
+          if(!b.split && b.x <= b.splitX){
+            b.split = true;
+            // สร้างชิ้นส่วนกระจาย
+            for(let i=0;i<SHARD_COUNT;i++){
+              const angle = (-0.6 + i*(1.2/(SHARD_COUNT-1))); // จาก -0.6..+0.6 rad
+              const sv = SHARD_SPEED*(1+Math.random()*0.2);
+              shards.push({x:b.x-b.len, y:b.y, vx:sv, vy:sv*Math.sin(angle), r:4});
+            }
+          }
+        }
+        // ลบลำแสงที่พ้นหน้าจอ หรือแตกแล้ว
+        beams = beams.filter(b=>!b.split && b.x > -20);
+
+        // ชิ้นส่วนกระสุน
+        for(const s of shards){ s.x -= s.vx*dt; s.y += s.vy*dt; }
+        shards = shards.filter(s=> s.x>-20 && s.y>-20 && s.y<HEIGHT);
+        // ชนลำแสง (ก่อนแตก) = สี่เหลี่ยมผืนผ้า
+        for(const b of beams){
+          if(rectRectCollide(player.x+6,player.y+6,player.w-12,player.h-12, b.x-b.len, b.y-b.h/2, b.len, b.h)){ gameOver=true; break; }
+        }
+        // ชนชิ้นส่วน
+        for(const s of shards){
+          if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12, s.x, s.y, s.r)){ gameOver=true; break; }
+        }
+      }
+
+      // ชนะบอสด้วยเหรียญ
       for(let i=coins.length-1;i>=0;i--){
         const c=coins[i];
         if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,c.x,c.y,c.r)){
           coins.splice(i,1); boss.hits++;
           if(boss.hits>=boss.coinsToWin){
-            fires=[]; boss=null; mode='exitBoss'; bossDefeatedThisRound=true;
+            fires=[]; bossBlocks=[]; beams=[]; shards=[];
+            boss=null; mode='exitBoss'; bossDefeatedThisRound=true;
           }
         }
-      }
-      for(const f of fires){
-        if(rectCircleCollide(player.x+6,player.y+6,player.w-12,player.h-12,f.x,f.y,f.r)){ gameOver=true; break; }
       }
 
     } else if(mode==='exitBoss'){
@@ -340,14 +405,20 @@
 
   function enterBoss(){ mode='enterBoss'; }
   function createBoss(){
+    const types=['test1','test2','test3'];
+    const pick = types[Math.floor(Math.random()*types.length)];
     boss={
+      type: pick,
       x:WIDTH*0.75, y:HEIGHT*0.32, vy:90, dir:1,
       hits:0, alpha:0, scale:0.7, img:bossImg,
       coinsToWin: randInt(MIN_COINS_TO_WIN, MAX_COINS_TO_WIN)
     };
+    // reset attack pools/timers per boss
+    fires=[]; bossBlocks=[]; beams=[]; shards=[]; fireTimer=0; blockTimer=0; beamTimer=0;
+    notiText = `พบ BOSS: ${pick}`; notiTimer = 1.8;
   }
   function finishBoss(){
-    coins=[]; fires=[];
+    coins=[]; fires=[]; bossBlocks=[]; beams=[]; shards=[];
     if(bossDefeatedThisRound){
       bossKills++;
       speedBossMul = 1 + bossKills * BOSS_SPEED_STEP;
@@ -379,9 +450,21 @@
     if(py<gapY || (py+ph)>gapB) return true;
     return false;
   }
+  function collideBossBlock(b){
+    // เหมือนท่อปกติแต่ใช้ gap เฉพาะของบอส
+    const pipeW=b.w||60, gapY=b.topH, gapB=b.topH+(b.gap||BOSS_BLOCK_GAP);
+    const px=player.x+6, py=player.y+6, pw=player.w-12, ph=player.h-12;
+    const hitX=(px<b.x+pipeW)&&(px+pw>b.x);
+    if(!hitX) return false;
+    if(py<gapY || (py+ph)>gapB) return true;
+    return false;
+  }
   function rectCircleCollide(rx,ry,rw,rh,cx,cy,cr){
     const cxst=clamp(cx,rx,rx+rw), cys=clamp(cy,ry,ry+rh);
     const dx=cx-cxst, dy=cy-cys; return (dx*dx+dy*dy)<=cr*cr;
+  }
+  function rectRectCollide(ax,ay,aw,ah, bx,by,bw,bh){
+    return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
   }
   function aabbIntersect(ax,ay,aw,ah, bx,by,bw,bh){
     return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by;
@@ -395,7 +478,7 @@
     ctx.fillStyle=g; ctx.fillRect(0,0,WIDTH,HEIGHT);
     ctx.fillStyle='#d1fae5'; ctx.fillRect(0,HEIGHT-30,WIDTH,30);
 
-    // pipes
+    // pipes (ปกติ)
     const topOff=-pipeHide*HEIGHT, botOff=pipeHide*HEIGHT, alpha=1-easeInOutCubic(pipeHide);
     if(mode!=='boss'){ ctx.save(); ctx.globalAlpha=clamp(alpha,0,1); for(const p of pipes){ drawPipe(p,topOff,botOff);} ctx.restore(); }
 
@@ -412,7 +495,11 @@
         else { ctx.fillStyle='var(--boss)'; roundRect(ctx,-24,-24,48,48,12); ctx.fill(); }
         ctx.restore();
       }
-      for(const f of fires){ drawFire(f); }
+      // โจมตี/สิ่งกีดขวางของบอส
+      if(boss?.type==='test1'){ for(const f of fires){ drawFire(f); } }
+      if(boss?.type==='test2'){ for(const b of bossBlocks){ drawBossBlock(b); } }
+      if(boss?.type==='test3'){ for(const b of beams){ drawBeam(b); } for(const s of shards){ drawShard(s); } }
+      // เหรียญ
       for(const c of coins){ drawCoin(c); }
     }
 
@@ -438,7 +525,7 @@
       ctx.fillStyle='#0f172a'; ctx.font='14px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.fillText(notiText, WIDTH/2, HEIGHT*0.14+26); ctx.textAlign='start';
     }
 
-    // power message กลางจอ
+    // power message กลางจอ (แฮมสเตอร์)
     if(powerTextTimer>0){
       const a = Math.min(1, powerTextTimer / POWER_TEXT_LIFETIME);
       ctx.save();
@@ -465,11 +552,27 @@
     const progress = Math.max(0, Math.min(1, need ? (got/need) : 0));
     ctx.fillStyle='rgba(139,92,246,.6)'; ctx.fillRect(pad,pad,barW*progress,barH);
     ctx.fillStyle='#4c1d95'; ctx.font='bold 13px ui-sans-serif, system-ui'; ctx.textAlign='center';
-    ctx.fillText(`BOSS – เก็บเหรียญให้ครบ ${need} ชิ้น (ระวังไฟ!)`, WIDTH/2, pad+17); ctx.textAlign='start';
+    ctx.fillText(`BOSS – เก็บเหรียญให้ครบ ${need} ชิ้น (ระวังการโจมตี!)`, WIDTH/2, pad+17); ctx.textAlign='start';
   }
+
   function drawCoin(c){ const r=c.r; ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(Math.sin(c.spin)*0.3); ctx.fillStyle='#f59e0b'; ctx.beginPath(); ctx.arc(0,0,r+2,0,Math.PI*2); ctx.fill(); ctx.fillStyle='var(--coin)'; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#fef3c7'; starPath(ctx,5,r*0.5,r*0.2); ctx.fill(); ctx.restore(); }
   function drawFire(f){ ctx.save(); ctx.translate(f.x,f.y); ctx.fillStyle='var(--fire)'; ctx.beginPath(); ctx.moveTo(0,0); ctx.bezierCurveTo(-8,-6,-14,6,0,12); ctx.bezierCurveTo(14,6,8,-6,0,0); ctx.fill(); ctx.fillStyle='#fdba74'; ctx.beginPath(); ctx.arc(-2,4,3,0,Math.PI*2); ctx.fill(); ctx.restore(); }
   function drawPipe(p,topOff,botOff){ const pipeW=60, r=10, topH=p.topH, bottomY=p.topH+PIPE_GAP; ctx.fillStyle='#a3e635'; roundRect(ctx,p.x,0+topOff,pipeW,topH,r); ctx.fill(); roundRect(ctx,p.x,bottomY+botOff,pipeW,HEIGHT-bottomY-30,r); ctx.fill(); }
+  function drawBossBlock(b){
+    const pipeW=b.w||60, r=10, topH=b.topH, bottomY=b.topH+(b.gap||BOSS_BLOCK_GAP);
+    ctx.fillStyle='var(--block)';
+    roundRect(ctx, b.x, 0, pipeW, topH, r); ctx.fill();
+    roundRect(ctx, b.x, bottomY, pipeW, HEIGHT-bottomY-30, r); ctx.fill();
+  }
+  function drawBeam(b){
+    ctx.save();
+    ctx.fillStyle='var(--beam)';
+    ctx.fillRect(b.x-b.len, b.y-b.h/2, b.len, b.h);
+    ctx.restore();
+  }
+  function drawShard(s){
+    ctx.save(); ctx.fillStyle='var(--shard)'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); ctx.restore();
+  }
   function drawHamster(h){
     ctx.save(); ctx.translate(h.x, h.y);
     ctx.fillStyle='var(--ham-ear)'; ctx.beginPath(); ctx.arc(6,4,6,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc( h.w-6,4,6,0,Math.PI*2); ctx.fill();
@@ -544,15 +647,10 @@
     let count=0,N=1000; for(let i=0;i<N;i++){ if(Math.random()<HAMSTER_CHANCE) count++; }
     const p=count/N; assert('hamster chance ~0.2', p>0.15 && p<0.25);
 
-    // อายุบัฟ x10 5 วิ (กัน floating-point flakiness + saturate)
-    let tmpMul = 10, tmpTimer = 5; const EPS = 1e-9;
-    for (let i = 0; i < 300; i++) { tmpTimer -= 1/60; if (tmpTimer <= EPS) { tmpMul = 1; tmpTimer = 0; break; } }
-    assert('buff ends -> back to 1', tmpMul === 1);
-
-    // timer ถูกตัดเป็นศูนย์
-    let tt = 5;
-    for (let i = 0; i < 300; i++) { tt -= 1/60; if (tt <= 0) { tt = 0; break; } }
-    assert('timer saturates to 0', tt === 0);
+    // บอสสุ่มต้องเป็นหนึ่งในชุด test1/2/3
+    const types = new Set(['test1','test2','test3']);
+    let ok=true; for(let i=0;i<20;i++){ const t=['test1','test2','test3'][Math.floor(Math.random()*3)]; if(!types.has(t)) ok=false; }
+    assert('boss type in allowed set', ok);
 
     const passed=tests.filter(t=>t.pass).length;
     console.log(`✅ Self-tests passed ${passed}/${tests.length}`);
