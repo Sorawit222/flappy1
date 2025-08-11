@@ -12,8 +12,8 @@
     .card{ width:min(560px,100%); background:var(--card); border:1px solid var(--border); border-radius:18px; box-shadow:0 10px 30px rgba(2,6,23,.06); padding:16px; }
     .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap}
     .muted{color:var(--muted); font-size:12px}
-    button, label[for="imgPick"], label[for="bossPick"]{ border:0; background:#f1f5f9; padding:8px 12px; border-radius:12px; cursor:pointer; transition:transform .1s ease, box-shadow .2s ease; font-size:13px; }
-    button:hover, label[for="imgPick"]:hover, label[for="bossPick"]:hover{ box-shadow:0 6px 16px rgba(2,6,23,.08)}
+    button{ border:0; background:#f1f5f9; padding:8px 12px; border-radius:12px; cursor:pointer; transition:transform .1s ease, box-shadow .2s ease; font-size:13px; }
+    button:hover{ box-shadow:0 6px 16px rgba(2,6,23,.08)}
     button:active{ transform:scale(.97)}
     #playBtn{ background:var(--accent); color:white }
     canvas{ width:100%; height:auto; image-rendering:auto; display:block; border-radius:14px; border:1px solid var(--border) }
@@ -27,7 +27,7 @@
     <div class="row">
       <div>
         <strong>นกบิน ออนไลน์</strong>
-        <div class="muted">พิมพ์ชื่อก่อนเล่น • แตะ/คลิก/Space กระโดด • อัปโหลดรูปตัวเล่น/บอสได้</div>
+        <div class="muted">พิมพ์ชื่อก่อนเล่น • แตะ/คลิก/Space กระโดด</div>
         <div class="muted" style="margin-top:6px">
           <span class="tag">บอส: สุ่มเหรียญที่ต้องเก็บ 3–50</span>
           <span class="tag">ฆ่าบอสแล้วฉากเร็วขึ้น</span>
@@ -39,17 +39,16 @@
           <span class="muted">ชื่อ</span>
           <input id="playerName" type="text" maxlength="16" placeholder="พิมพ์ชื่อก่อนเล่น" />
         </div>
-        <input id="imgPick" type="file" accept="image/*" style="display:none" />
-        <input id="bossPick" type="file" accept="image/*" style="display:none" />
-        <label for="imgPick">รูปตัวเล่น</label>
-        <label for="bossPick">รูปบอส</label>
         <button id="playBtn">เริ่มใหม่</button>
       </div>
     </div>
 
     <canvas id="game" width="480" height="640" aria-label="Flappy Game"></canvas>
 
-    <p class="muted" style="margin:10px 4px 2px">* ตอนจบเกมจะมีปุ่ม <b>ส่งสกอร์ออนไลน์</b> และ <b>เริ่มใหม่</b> แยกกัน • สกอร์บอร์ดอ่านเฉพาะจาก GitHub Issues</p>
+    <p class="muted" style="margin:10px 4px 2px">
+      * วางไฟล์ <b>player.png</b> และ/หรือ <b>boss.png</b> ไว้โฟลเดอร์เดียวกับหน้านี้เพื่อใช้รูปฝั่งเรา • ถ้าไม่มีไฟล์ เกมจะใช้ทรงพื้นฐานแทน<br>
+      * จบเกมมีปุ่ม <b>ส่งสกอร์ออนไลน์</b> และ <b>เริ่มใหม่</b> • สกอร์บอร์ดอ่านจาก GitHub Issues
+    </p>
   </main>
 
   <script>
@@ -110,27 +109,22 @@
 
   // ===== ตัวละคร/บอส =====
   const player={x:WIDTH*0.28,y:HEIGHT*0.42,vy:0,w:36,h:36,img:null};
+  // โหลดรูปผู้เล่นจากไฟล์ฝั่งเรา (ถ้ามี)
   const defaultImg=new Image(); defaultImg.src='player.png';
-  defaultImg.onload=()=>player.img=defaultImg; defaultImg.onerror=()=>player.img=null;
+  defaultImg.onload=()=>player.img=defaultImg;
+  defaultImg.onerror=()=>player.img=null;
 
   let boss=null, bossImg=null, coins=[], fires=[], coinTimer=0, fireTimer=0;
+  // โหลดรูปบอสจากไฟล์ฝั่งเรา (ถ้ามี)
+  const defaultBoss=new Image(); defaultBoss.src='boss.png';
+  defaultBoss.onload=()=>bossImg=defaultBoss;
+  defaultBoss.onerror=()=>bossImg=null;
 
   // ===== แฮมสเตอร์ (power-up) =====
   let hamster=null;
   let hamTimer=0, hamNextGap=randRange(HAMSTER_MIN_GAP, HAMSTER_MAX_GAP);
   let scoreMul=1, scoreMulTimer=0; // x10 ชั่วคราว
   let powerTextTimer=0; const POWER_TEXT_LIFETIME=1.8;
-
-  document.getElementById('imgPick').addEventListener('change',e=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    const u=URL.createObjectURL(f); const im=new Image();
-    im.onload=()=>{player.img=im; URL.revokeObjectURL(u);}; im.src=u;
-  });
-  document.getElementById('bossPick').addEventListener('change',e=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    const u=URL.createObjectURL(f); const im=new Image();
-    im.onload=()=>{bossImg=im; URL.revokeObjectURL(u);}; im.src=u;
-  });
 
   document.getElementById('playBtn').addEventListener('click',()=>{ if(ensureName()) resetGame(); });
 
