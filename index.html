@@ -1,4 +1,56 @@
-// game.ts — TypeScript port of the current HTML/JS game
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>นกบิน ออนไลน์</title>
+  <style>
+    :root{ --bg1:#e0f2ff;--bg2:#fef5ff;--ink:#0f172a;--muted:#64748b;--accent:#22c55e;--boss:#8b5cf6;--coin:#facc15;--fire:#fb923c; --card:#ffffff;--border:#e5e7eb; --ham:#a16207; --ham-ear:#854d0e; --ham-belly:#fef3c7; --block:#60a5fa; --beam:#06b6d4; --shard:#0ea5e9; --box:#fde68a; --box2:#f59e0b; --key:#fcd34d; --secretTint:#ecfccb; --tri:#f43f5e; --tri-warn:#22c55e; --tri-hot:#ef4444; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{ margin:0; display:grid; place-items:center; padding:16px; background:linear-gradient(180deg,var(--bg1),var(--bg2)); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:var(--ink); }
+    .card{ width:min(560px,100%); background:var(--card); border:1px solid var(--border); border-radius:18px; box-shadow:0 10px 30px rgba(2,6,23,.06); padding:16px; }
+    .row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; flex-wrap:wrap}
+    .muted{color:var(--muted); font-size:12px}
+    button{ border:0; background:#f1f5f9; padding:8px 12px; border-radius:12px; cursor:pointer; transition:transform .1s ease, box-shadow .2s ease; font-size:13px; }
+    button:hover{ box-shadow:0 6px 16px rgba(2,6,23,.08)}
+    button:active{ transform:scale(.97)}
+    #playBtn{ background:var(--accent); color:white }
+    canvas{ width:100%; height:auto; image-rendering:auto; display:block; border-radius:14px; border:1px solid var(--border) }
+    .namebox{ display:flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #e2e8f0; padding:6px 8px; border-radius:10px }
+    .namebox input{ border:0; outline:none; background:transparent; min-width:140px; font-size:13px }
+    .tag{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:#eef2ff; color:#4338ca}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="row">
+      <div>
+        <strong>นกบิน ออนไลน์</strong>
+        <div class="muted">พิมพ์ชื่อก่อนเล่น • แตะ/คลิก/Space กระโดด</div>
+        <div class="muted" style="margin-top:6px">
+          <span class="tag">บอสสุ่ม: test1 / test2 / test3</span>
+          <span class="tag">ห้องลับจากกุญแจ (20%)</span>
+          <span class="tag">แฮมสเตอร์: x10 คะแนน 5 วิ (20%)</span>
+          <span class="tag">ใหม่: ศัตรูสามเหลี่ยมยิงเลเซอร์</span>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end">
+        <div class="namebox">
+          <span class="muted">ชื่อ</span>
+          <input id="playerName" type="text" maxlength="16" placeholder="พิมพ์ชื่อก่อนเล่น" />
+        </div>
+        <button id="playBtn">เริ่มใหม่</button>
+      </div>
+    </div>
+
+    <canvas id="game" width="480" height="640" aria-label="Flappy Game"></canvas>
+
+    <p class="muted" style="margin:10px 4px 2px">
+      * ใส่ไฟล์ <b>player.png</b> / <b>boss.png</b> ไว้โฟลเดอร์เดียวกับหน้านี้เพื่อใช้รูปฝั่งเรา (ถ้าไม่มีจะใช้ทรงพื้นฐาน)
+    </p>
+  </main>
+ // game.ts — TypeScript port of the current HTML/JS game
 // Build: tsc --target ES2020 --module ES2020 --outDir ./dist
 // HTML: <script type="module" src="./dist/game.js"></script>
 
@@ -758,3 +810,5 @@ function overlay(text: string, alpha: number = 0.7): void {
 
   console.log(`✅ Self-tests passed ${tests.filter(t => t.pass).length}/${tests.length}`);
 })();
+</body>
+</html>
